@@ -12,10 +12,13 @@ During the course, we will examine the fundamental questions of economic geograp
 **Assessment:**
 Participation in the lectures - 10%
 All students must participate in the lectures. If you miss the upcoming class please write an email to toth.gergo@krtk.mta.hu. Missing more than 3 lectures results in a reduction from the participation grade.
+
 Seminar activity - 20%
 Students receive points based on their activity during the seminar. They should answer questions,formulate their own inquiries, and actively participate in the discussion.
+
 Homework - 20%
 During the semester, students have one homework exercise. 
+
 Semester project - 50%
 For the project, students have to choose one topic related to the course and write a paper (minimum 1000 - maximum 4000 words) to demonstrate their understanding of the concepts and the data analysis methods acquired during the semester. The project paper must follow the attached guidelines! R script attached to the final paper is welcomed (not included in the word count)!
 
