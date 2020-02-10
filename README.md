@@ -135,7 +135,8 @@ Tóth, G., Wachs, J., Di Clemente, R., Jakobi, Á., Ságvári, B., Kertész, J.,
 *Seminar: Communication networks on Twitter*
 
 **12-13) Project presentations**  
-Students are presenting their research proposals for their seminar project paper. All presentations should address the following topics:  * Research Question / Problem to be solved  
+Students are presenting their research proposals for their seminar project paper. All presentations should address the following topics:
+* Research Question / Problem to be solved  
 * Short theoretical background  
 * Hypothesis  
 * Proposed methodology  
