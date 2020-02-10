@@ -1,5 +1,5 @@
 # Anet course
-Network and spatial analysis.
+# Network and Spatial Analysis.
 
 **Description**
 <div style="text-align: justify"> 
@@ -8,8 +8,7 @@ The course is intended for undergraduate students with an above-average prior kn
 During the course, we will examine the fundamental questions of economic geography. We start with the concept and empirical analysis of the uneven distribution of economic activities and the geographical aspects of economic development. As we see that economic progress doesn’t happen in an empty vacuum, we introduce the connections of the agents by using network science techniques. After that, we look back to the general equilibrium model from Microeconomics I- II. and extend it by introducing spatial and social dimensions. In the second part of the course, we focus on applied methods such as mapping, scaling and communication networks. 
 </div>
 
-**Assessment:**
-
+**Assessment:**  
 *Participation in the lectures - 10%*  
 All students must participate in the lectures. If you miss the upcoming class please write an email to toth.gergo@krtk.mta.hu. Missing more than 3 lectures results in a reduction from the participation grade.  
 *Seminar activity - 20%*  
@@ -135,8 +134,7 @@ Tóth, G., Wachs, J., Di Clemente, R., Jakobi, Á., Ságvári, B., Kertész, J.,
 *Seminar: Communication networks on Twitter*
 
 **12-13) Project presentations**  
-Students are presenting their research proposals for their seminar project paper. All presentations should address the following topics:  
-* Research Question / Problem to be solved  
+Students are presenting their research proposals for their seminar project paper. All presentations should address the following topics:  * Research Question / Problem to be solved  
 * Short theoretical background  
 * Hypothesis  
-* Proposed methodology**
+* Proposed methodology  
