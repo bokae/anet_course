@@ -10,11 +10,11 @@ The course is intended for undergraduate students with an above-average prior kn
 During the course, we will examine the fundamental questions of economic geography. We start with the concept and empirical analysis of the uneven distribution of economic activities and the geographical aspects of economic development. As we see that economic progress doesn’t happen in an empty vacuum, we introduce the connections of the agents by using network science techniques. After that, we look back to the general equilibrium model from Microeconomics I- II. and extend it by introducing spatial and social dimensions. In the second part of the course, we focus on applied methods such as mapping, scaling and communication networks. 
 
 **Assessment:**
-Participation in the lectures - 10%
-All students must participate in the lectures. If you miss the upcoming class please write an email to toth.gergo@krtk.mta.hu. Missing more than 3 lectures results in a reduction from the participation grade.
 
-Seminar activity - 20%
-Students receive points based on their activity during the seminar. They should answer questions,formulate their own inquiries, and actively participate in the discussion.
+Participation in the lectures - 10%  
+All students must participate in the lectures. If you miss the upcoming class please write an email to toth.gergo@krtk.mta.hu. Missing more than 3 lectures results in a reduction from the participation grade.  
+Seminar activity - 20%  
+Students receive points based on their activity during the seminar. They should answer questions,formulate their own inquiries, and actively participate in the discussion.  
 
 Homework - 20%
 During the semester, students have one homework exercise. 
