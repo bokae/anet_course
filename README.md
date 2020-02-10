@@ -1,5 +1,5 @@
 # Anet course
-# Network and Spatial Analysis.
+# Network and Spatial Analysis
 
 **Description**
 <div style="text-align: justify"> 
@@ -7,6 +7,7 @@ So far in economic theory, geographical space and social connections have mostly
 The course is intended for undergraduate students with an above-average prior knowledge of econometrics, computational skills and interest in cross-disciplinary research. The main feature of the class is the cross-fertilization of ideas from different but complementary fields of economics, geography, physics, and social and network science.  
 During the course, we will examine the fundamental questions of economic geography. We start with the concept and empirical analysis of the uneven distribution of economic activities and the geographical aspects of economic development. As we see that economic progress doesn’t happen in an empty vacuum, we introduce the connections of the agents by using network science techniques. After that, we look back to the general equilibrium model from Microeconomics I- II. and extend it by introducing spatial and social dimensions. In the second part of the course, we focus on applied methods such as mapping, scaling and communication networks. 
 </div>
+
 
 **Assessment:**  
 *Participation in the lectures - 10%*  
