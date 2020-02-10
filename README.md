@@ -29,7 +29,7 @@ Gergo Toth (toth.gergo@krtk.mta.hu)
 
 **1) Course Introduction + Topics in Economic Geography I.**  
 a) Uneven spatial distribution of economic activities  
-Markusen, A. (1996): Sticky Places in Slippery Space: A Typology of Industrial Districts. Economic Geography, 72, 3, pp. 293-313.
+Markusen, A. (1996): Sticky Places in Slippery Space: A Typology of Industrial Districts. Economic Geography, 72, 3, pp. 293-313.  
 b) Agglomeration (economies) and clusters  
 Duranton, G. - Kerr, W. (2018): The Logic of Agglomeration. In Clark, G. L. - Feldman, M. P. - Gertler, M. S. - Wójcik, D. (eds.): The New Oxford Handbook of Economic Geography. Oxford University Press, Oxford, pp. 347-365.  
 c) Related variety  
