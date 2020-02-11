@@ -74,7 +74,7 @@ c) Spinoffs and clusters
 Klepper, S. (2007): Disagreements, Spinoffs, and the Evolution of Detroit as the Capital of the US Automobile Industry. Management Science, 53, 4, 616-631.  
 
 *Seminar: EconGeo R package and Exponential Random Graph Models*  
-*Juhász S. (2019): Spinoffs and tie formation in cluster knowledge networks. Small Business Economics, 1-20.*     https://github.com/sandorjuhasz/ergm-cluster
+*Juhász S. (2019): Spinoffs and tie formation in cluster knowledge networks. Small Business Economics, 1-20.*     *https://github.com/sandorjuhasz/ergm-cluster*
 
 **6) Principle of Relatedness**  
 a) Related- and unrelated variety and regional growth  
@@ -113,8 +113,8 @@ Arcaute, E., Hatna, E., Ferguson, P., Youn, H., Johansson, A., & Batty, M. (2015
 Leitão, J. C., Miotto, J. M., Gerlach, M., & Altmann, E. G. (2016). Is this scaling nonlinear? Royal Society Open Science, 3(7), 1–11.  
 
 *Seminar: Scaling laws of politics and words*  
-*Bokányi, E., Szállási, Z., & Vattay, G. (2018). Universal scaling laws in metro area election results. PLOS ONE, 13(2), e0192913.*   https://doi.org/10.1371/journal.pone.0192913  
-*Bokányi, E., Kondor, D., & Vattay, G. (2019). Scaling in words on Twitter. Royal Society Open Science, 6(10), 190027.*     https://doi.org/10.1098/rsos.190027
+*Bokányi, E., Szállási, Z., & Vattay, G. (2018). Universal scaling laws in metro area election results. PLOS ONE, 13(2), e0192913.*   *https://doi.org/10.1371/journal.pone.0192913*  
+*Bokányi, E., Kondor, D., & Vattay, G. (2019). Scaling in words on Twitter. Royal Society Open Science, 6(10), 190027.*     *https://doi.org/10.1098/rsos.190027*
 
 
 **10) Easter**
