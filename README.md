@@ -1,4 +1,4 @@
-# Anet course
+# ANET course
 # Network and Spatial Analysis
 
 **Description**
