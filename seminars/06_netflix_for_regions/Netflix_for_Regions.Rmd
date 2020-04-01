@@ -1,0 +1,480 @@
+---
+title: "Netflix for Regions"
+output:
+  html_document:
+    css: style.css
+    df_print: paged
+    number_sections: true
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+# **Introduction**
+
+In this seminar we are going to explore the industry space of Västernorrland region of Sweden in 2016. The regional economic development agency approaches us with a list of industries they want to know more about. These belong to the broad categories of Forestry, Transportation, Infocommunication, and Finance. Our plan is to explore the relatedness density of these industries, i.e. how related are they to the regional industrial portfolio. In a second phase we are going to add some further recommendations outside the pre-specified industries.
+
+The focus industries are the following.   
+
+*Forestry*  
+
+* 21, Skogsskotsel  
+* 22, Drivning  
+* 24, Skogsbruksservice  
+* 161, SagningHyvling  
+* 162, TraKorkHalm  
+* 171, MassaPapper  
+* 201, Baskemikalier  
+* 204, Rengoringsmedel  
+
+*Transportation*  
+
+* 304, MilitaraFordon  
+* 309, OvrigTransport  
+
+*Infocommunication*  
+
+* 611, TelekomTrad  
+* 619, OvrigTelekom  
+* 620, Datakonsult  
+* 631, Databehandling  
+
+*Finance*  
+
+* 641, Finansformedling  
+* 649, OvrigFinans  
+* 651, Forsakring  
+
+# **Setup and global datawork**
+
+We are going to rely mostly on tidyverse packages to do our analysis.
+
+```{r setup, include = FALSE, echo = FALSE}
+#Loading packages
+library("dplyr")
+library("ggplot2")
+library("lemon")
+
+#prepare color palette
+group_colors <- c(
+  "1" = "#5C1A79", #purple
+  "2" = "#931857", #violet
+  "3" = "#1D4677", #blue
+  "4" = "#8CC0FF", #light blue
+  "5" = "#15775C", #tan
+  "6" = "#FFD72D", #yellow
+  "7" = "#D05F08", #orange
+  "8" = "#347F18", #green
+  "9" = "#415E36", #oil
+  "10" = "#512A08", #brown
+  "11" = "#1C1917", #black
+  "12" = "#94080F", #red
+  "13" = "#F97077", #pink
+  # technical colors
+  "55" = "#C00000", #Stata red
+  "66" = "#FF0000", #exit uber red 
+  "77" = "#51F215", #entry uber green
+  "99" = "#E5E5E5") #grey
+
+focus_vect <- c(21, 22, 24, 161, 162, 171, 201, 204, 304, 309, 611, 619, 620, 631, 641, 649, 651)
+```
+
+Next we need to take a look at our data.
+
+## **The edgelist**
+
+First comes the edgelist.
+
+```{r}
+#load edgelist
+load("edgelist.RData")
+
+#inspect the edgelist
+head(edgelist)
+```
+
+The edgelist contains industry-pairs, and the skill-relatedness value. A couple of remarks are in order:   
+
+* Industries here mean 3-digit industries according to the NACE classification system. When doing analysis, it is usually good to have more detailed classifications. Here the 3-digit level was chosen because it yields a handleable number of industries (cca. 250).  
+* Skill-relatedness is another way of constructing a relatedness measure between pairs of economic activities such as industries or occupations (for details see Neffke et al. 2017). Skill-relatedness shows how strong are labour flows between economic activities compared to what we would expect based on the size of these industries. The idea is that workers moving from one industry to a related one can transfer many of their accumulated skills. Constructing a skill-relatedness network is straightforward but requires labour flow data with high resolition of economic activities, which is difficult to get. Here we have the already calculated skill relatedness values. Note that relatedness values in the above exercise data have been randomly altered.
+
+Let's see what we know about the edgelist!
+
+```{r}
+#node information
+edgelist %>% 
+  summarise(n_ind_i = n_distinct(nace_i),
+            n_ind_j = n_distinct(nace_j), 
+            indentical = sum(nace_i == nace_j),
+            obs = n())
+```
+
+We know that we have 257 industries, as well as that this edgelist is a complete edgelist. That is, for industries 11 and 12 for e.g. the data contains the 11--12 and the 12--11 edge. We know this from the number of observations, which is the square of the number of industries. This, and the *identical* variable tells us that the edgelist also contains loops. These are very important features to know about your edgelist. If *n* is the number of nodes, in a directed network, allowing loops we should have n\*n edges. In the case of the skill-relatedness network, loops are not that informative, and assuming mutuality of relatedness is viable, so in practice we can use (n\*n-1)/2 edges.
+
+```{r}
+#distribution of skill-relatedness
+edgelist %>%
+  filter(nace_i < nace_j) %>%
+  ggplot(aes(x = srel_norm)) +
+    geom_histogram()
+```
+
+In principle, skill-relatedness could go from 0 to 1 in our data, but as we can see, high-values of skill relatedness are rare. And a technical note: in the above script by filtering for nace_i < nace_j, we got rid of duplicate information on edges and loops.
+
+## **The nodelist**
+
+Next comes the nodelist.
+
+```{r}
+#load nodelist
+load("nodelist.RData")
+
+#inspect the edgelist
+head(nodelist)
+```
+
+List of variables:
+
+* nace_i, 3 digit industry NACE code  
+* nace_j, same, to be used with edgelist later  
+* lq, location quotient, see later  
+* lq_norm, (lq - 1) / (lq + 1)  
+* indlab_new, short industry labels  
+* indlab_original, long industry labels  
+* group_new, classification into industry groups  
+* median_inc_ind_reg, median income of workers in an industry in the region  
+* median_inc_ind_swe, median income of workers in an industry in Sweden  
+* emp_ind_reg, number of workers in the industry-region  
+* plants_ind_reg, number of plants in an industry in the region  
+* resc_log_plants_ind_reg, rescaled value of log10 number of plants in the industry region  
+
+We need to add one more, the tag for focus industries.
+
+```{r}
+#number of nodes (industries)
+nodelist <-
+  nodelist %>% 
+  mutate(tag_focus = ifelse(nace_i %in% focus_vect, 1, 0))
+```
+
+Let's see how many industries are there in the nodelist!
+
+```{r}
+#number of nodes (industries)
+nodelist %>% 
+  summarise(n_ind_i = n_distinct(nace_i))
+```
+
+We have 257 industries, so we have a good chance of matching the edgelist :)
+
+## **Relatedness density**
+
+Now we have to calculate our main variable, relatedness density. This variable measures the weighted average relatedness of an industry to all other industries that are present in the region. Present here means having a location quotient that is higher than 1 (\(LQ^{ind}\) below 1). Formally:
+
+\(d_i = \frac{\sum_{i \neq j} \phi_{ij} LQ_j^{ind}}{\sum_{i \neq j} \phi_{ij}}\)
+
+Sidenote: location quotient (LQ) is the same as revealed comparative advantage (ref. Sanyi's seminar). LQ is a more common phrasing in regional research. LQ here specifically means the share of an industry of all employment in the region, compared to the share of that industry in the total employment of Sweden. So an LQ > 1 means a geographical concentration of employment of an industry.
+
+The EconGeo package introduced in Sanyi's seminar is capable of calculated relatedness density. Here I show a manual approach.
+
+```{r}
+#merge necessary data into edgelist
+density <- 
+  edgelist %>%
+  left_join(nodelist %>% select(nace_i, lq), by = "nace_i") %>%
+  rename(lq_i = lq) %>%
+  left_join(nodelist %>% select(nace_j, lq), by = "nace_j") %>%
+  rename(lq_j = lq) %>%
+  mutate(lq_j_dummy = ifelse(lq_j >= 1, 1, 0)) %>%
+  filter(nace_i != nace_j)
+
+density
+```
+
+```{r}
+#calculate density
+density <- 
+  density %>%
+  group_by(nace_i) %>%
+  summarise(dens = sum(srel_norm * lq_j_dummy) / sum(srel_norm)) %>%
+  ungroup()
+
+density
+```  
+
+```{r}
+#inspect density distribution
+density %>%
+  ggplot(aes(x = dens)) +
+    geom_histogram()
+```  
+
+```{r}
+#add density to node characteristics
+nodelist <- 
+  nodelist %>%
+  left_join(density, by = "nace_i")
+```  
+
+# **Exploring focal industries**
+
+## **Local concentration of focal industries**
+
+Now that we have our key variables, the first question is whether the region has a relative specialisation of emplyoment.
+
+```{r}
+#barplot for selection of focal industries' LQs
+fig_data <- 
+  nodelist %>% 
+  filter(tag_focus == 1) %>%
+  arrange(lq) %>%
+  mutate(lq_rank = seq(from = 1, to = n_distinct(nace_i), by = 1),
+    lq_rank_fact = factor(lq_rank))
+
+fig_data %>% 
+  ggplot(aes(y = lq_norm, x = lq_rank_fact)) +
+    geom_bar(aes(fill = group_new), stat = "identity", width = 0.75) +
+    scale_fill_manual(values = group_colors) +
+    theme(legend.position = "none",
+      panel.background = element_blank(),
+      panel.border = element_blank(),
+      panel.grid.major = element_line(colour = "#E5E5E5"),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(), 
+      axis.ticks = element_line(colour = "black")) +
+    scale_x_discrete(labels = fig_data$indlab_new) +
+    coord_capped_flip(ylim = c(-1, 1), bottom = "both", left = "both") +
+    xlab("Industry") +
+    ylab("Relative specialisation (normalised LQ)")
+```
+
+From this we can venture that the majority of focal industries are about what the region already has, while some represent diversification options that the region would like to explore. 
+
+## **Relatedness density of focal industries**
+
+The first question is how related are the focal industries to the regional portfolio. Theory and empirics would suggest that industries with many related industries are well embedded in the local economy, while industries with low relatedness density are in danger of exit.
+
+```{r}
+#barplot for selection of focal industries' relatedness density
+fig_data <- 
+  nodelist %>% 
+  filter(tag_focus == 1) %>%
+  arrange(dens) %>%
+  mutate(dens_rank = seq(from = 1, to = n_distinct(nace_i), by = 1),
+    dens_rank_fact = factor(dens_rank))
+
+fig_data %>%
+  ggplot(aes(y = dens, x = dens_rank_fact)) +
+    geom_bar(aes(fill = group_new), stat = "identity", width = 0.75) +
+    geom_hline(aes(yintercept = median(nodelist$dens))) +
+    scale_fill_manual(values = group_colors) + # Note that we use the group_colors vector here.
+    theme(legend.position = "none",
+      panel.background = element_blank(),
+      panel.border = element_blank(),
+      panel.grid.major = element_line(colour = "#E5E5E5"),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(), 
+      axis.ticks = element_line(colour = "black")) +
+  scale_x_discrete(labels = fig_data$indlab_new) +
+  coord_capped_flip(ylim = c(0, 1), bottom = "both", left = "both") +
+  xlab("Industry") +
+  ylab("Relatedness density")
+```
+
+If we use the median relatedness density as a reference point, we can say that the majority of focal industries are relatively well related to the regional portfolio. However the desired directions for diversification represent relatively high-risk as regional capabilities may be missing.
+
+## **Relatedness density of focal industries**
+
+The next question is whether the focal industries are also of high value to the region.
+
+```{r}
+#Smart specialisation scatter
+fig_data <- 
+  nodelist %>% 
+  filter(tag_focus == 1) 
+  
+fig_data %>%
+  ggplot(aes(x = dens, y = median_inc_ind_reg, color = group_new)) +
+    geom_point(size = 2) +
+    geom_text(aes(label = indlab_new), hjust = 0, vjust = 0) +
+    scale_color_manual(values = group_colors) +
+    geom_hline(yintercept = median(nodelist$median_inc_ind_reg, na.rm = TRUE), color = rgb(192, 0, 0, max = 255), size = 0.4, linetype = "dashed") +
+    geom_vline(xintercept = median(nodelist$dens), color = rgb(192, 0, 0, max = 255), size = 0.4, linetype = "dashed") +
+    theme(legend.position = "none",
+      panel.background = element_blank(),
+      panel.border = element_blank(),
+      panel.grid.major = element_line(colour = "#E5E5E5"),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(),
+      axis.ticks = element_line(colour = "black")) +
+    coord_capped_cart(xlim = c(0, 1), ylim = c(0, max(nodelist$median_inc_ind_reg, na.rm = TRUE)), bottom = "both", left = "both") +
+    xlab("Relatedness density") +
+    ylab("Median income of industry for region")
+```
+
+Here we use the median income of workers in the industry-region as a proxy for "value", but of course one can use complexity or vallue-added among others. We see that most focal regions are in the relatively "high-reward" category. Some ICT diversification options are however in the relatively "high-risk" category.
+
+## **Focal industry egonetworks**
+
+Using egonetworks, we can explore the above position of each industry in depth. Here, we show an example where the strongest 7.5% of connections for each industry are plotted in an LQ-median income coordinate system (see Lőrincz et al. 2019 for examples in Hungarian regions).
+
+```{r}
+#(1) We filter the nodelist for those industries for which we have all the necessary data, as well as they have at least 100 employees in the region. We also allow industry 204, as it is a focal industry, but with few employees.
+fig_data <-
+  nodelist %>%
+  filter((is.na(plants_ind_reg) != 1 & is.na(median_inc_ind_reg) != 1 & emp_ind_reg > 100) | nace_i == "204") %>%
+  mutate(tag_filt = 1)
+
+ind = "24" #Choose ego industry.
+
+fig_ego <- 
+  fig_data %>%
+  mutate(ego = ifelse(nace_i == ind, 1, 0)) %>%
+  arrange(desc(ego))
+
+#(2) We store information on the selected ego
+ego_id <- as.character(fig_ego[1, "nace_i"]) # Store NACE code of ego industry.
+ego_label <- as.character(fig_ego %>% filter(nace_i == ego_id) %>% select(indlab_new)) # Store label of ego industry
+ego_x <- as.numeric(fig_ego %>% filter(nace_i == ego_id) %>% select(median_inc_ind_reg)) # Store horizontal axis value of ego industry
+ego_y <- as.numeric(fig_ego %>% filter(nace_i == ego_id) %>% select(lq_norm)) # Store lq value of ego industry.
+ego_size <- as.numeric(fig_ego %>% filter(nace_i == ego_id) %>% select(plants_ind_reg)) # Store node size value of ego industry.
+fig_ego$color_hex <- group_colors[as.character(fig_ego$group_new)]
+
+#(3) Filtering for top 7.5% of edges and participating nodes
+edgelist_filt <- 
+  edgelist %>% 
+  left_join(fig_data %>% select(nace_i, tag_filt), by = c("nace_i" = "nace_i")) %>%
+  left_join(fig_data %>% select(nace_i, tag_filt), by = c("nace_j" = "nace_i")) %>%
+  filter(tag_filt.x == 1 | tag_filt.y == 1) %>% # remove industries below 100 emp, but keep "204"
+  filter(nace_i != nace_j) %>% # remove loops
+  filter(nace_i == ego_id) %>% # define ego
+  mutate(tag_top5 = ifelse(srel_norm > quantile(srel_norm, 0.925), 1, 0)) %>% # identify top 7.5% of edges
+  filter(tag_top5 == 1)
+
+ind_filt <- unique(c(edgelist_filt$nace_i, edgelist_filt$nace_j)) # Store the unique IDs of participating industries.
+
+fig_ego <- 
+  fig_ego %>%
+  mutate(tag_top5 = ifelse(nace_i %in% ind_filt, 1, 0)) %>%
+  filter(tag_top5 == 1)
+
+#(4) Produce the plot.
+egonet <- 
+  fig_ego %>% # Creating the scatterplot.
+  ggplot(aes(x = median_inc_ind_reg, y = lq_norm)) 
+
+for (i in 2:nrow(fig_ego)){ # Add links to each alter.
+  alter_id <- as.character(fig_ego[i, "nace_i"]) # Store alter NACE code.
+  alter_x <- as.numeric(fig_ego %>% filter(nace_i == alter_id) %>% select(median_inc_ind_reg)) # Store horizontal axis value of alter.
+  alter_y <- as.numeric(fig_ego %>% filter(nace_i == alter_id) %>% select(lq_norm)) # Store lq value of alter.
+  alter_color <- as.character(fig_ego %>% filter(nace_i == alter_id) %>% select(color_hex)) # Store color of alter.
+  edge_size <- as.numeric(edgelist_filt %>% # Store skillrelatedness value between ego and alter.
+    filter(nace_i == ego_id & nace_j == alter_id) %>% 
+    select(srel_norm))
+  
+  egonet <- 
+    egonet + geom_segment( # Add the links.
+    x = ego_x,
+    y = ego_y,
+    xend = alter_x,
+    yend = alter_y,
+    color = alter_color,
+    size = edge_size  * 40
+    )
+}
+
+# This section adds format to the plot
+egonet +
+  geom_point(aes(color = group_new, size = resc_log_plants_ind_reg), shape = 16) + # This line brings points to front.
+  scale_size_identity() +
+  scale_color_manual(values = group_colors) +
+  scale_x_continuous(breaks = round(seq(0, 600, by = 100), 0)) +
+  geom_hline(yintercept = 0, color = rgb(192, 0, 0, max = 255), size = 1, linetype = "dashed") +
+  theme(legend.position = "none",
+    plot.title = element_text(hjust = 0.5),
+    panel.background = element_blank(),
+    panel.border = element_blank(),
+    panel.grid.major = element_line(colour = "#E5E5E5"),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(), 
+    axis.ticks = element_line(colour = "black")) +
+  coord_capped_cart(xlim = c(0, 600), ylim = c(-1, 1), bottom = "both", left = "both") +
+  geom_text(aes(label = indlab_new), color = "black", size = 4) +
+  xlab("Median income of industry in the region") +
+  ylab("Relative specialisation (normalised LQ)") +
+  ggtitle(ego_label)
+```
+
+# **Exploring diversification options**
+
+While exploring given industries may be informative, we can also redirect the investigation to what should be done? Which direction for diversification seems feasible and valuable? 
+
+## **Low-risk candidates based on relatedness density**
+
+```{r}
+##barplot for selection of top 20 relatedness density among industries with LQ < 1
+fig_data <- 
+  nodelist %>%
+  filter(lq_norm <= 0) %>%
+  arrange(dens) %>%
+  mutate(dens_rank = seq(from = 1, to = n_distinct(nace_i), by = 1),
+    dens_rank_fact = factor(dens_rank)) %>%
+  filter(dens_rank > max(dens_rank) - 20)
+  
+fig_data %>% 
+  ggplot(aes(y = dens, x = dens_rank_fact)) +
+  geom_bar(aes(fill = group_new), stat = "identity", width = 0.75) +
+  geom_hline(aes(yintercept = median(nodelist$dens))) +
+  scale_fill_manual(values = group_colors) +
+  theme(legend.position = "none",
+    panel.background = element_blank(),
+    panel.border = element_blank(),
+    panel.grid.major = element_line(colour = "#E5E5E5"),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(), 
+    axis.ticks = element_line(colour = "black")) +
+  scale_x_discrete(labels = fig_data$indlab_new) +
+  coord_capped_flip(ylim = c(0, 1), bottom = "both", left = "both") +
+  xlab("Industry") +
+  ylab("Relatedness density")
+```
+
+Industries highly related to the local economy, but not being concentrated include some additional manufacturing activities, insurance, and some services, like vehicle rental and construction planning.
+
+## **Smart specialisation scatter variant**
+
+What about the value of these?
+
+```{r}
+# smart specialisation scatter for top diversification candidates based on relatedness density
+fig_data <- 
+  nodelist %>%
+  filter(lq_norm <= 0) %>%
+  arrange(dens) %>%
+  mutate(dens_rank = seq(from = 1, to = n_distinct(nace_i), by = 1),
+    dens_rank_fact = factor(dens_rank)) %>%
+  filter(dens_rank > max(dens_rank) - 20)
+
+fig_data %>%
+  ggplot(aes(x = dens, y = median_inc_ind_swe, color = group_new)) +
+    geom_point(size = 2) +
+    geom_text(aes(label = indlab_new), hjust = 0, vjust = 0) +
+    scale_color_manual(values = group_colors) +
+    geom_hline(yintercept = median(nodelist$median_inc_ind_swe, na.rm = TRUE), color = rgb(192, 0, 0, max = 255), size = 0.4, linetype = "dashed") +
+    geom_vline(xintercept = median(nodelist$dens), color = rgb(192, 0, 0, max = 255), size = 0.4, linetype = "dashed") +
+    theme(legend.position = "none",
+      panel.background = element_blank(),
+      panel.border = element_blank(),
+      panel.grid.major = element_line(colour = "#E5E5E5"),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(),
+      axis.ticks = element_line(colour = "black")) +
+    coord_capped_cart(xlim = c(0, 1), ylim = c(0, 600), bottom = "both", left = "both") +
+    xlab("Relatedness density") +
+    ylab("Median income in industry for Sweden")
+```
+
+Apparently, we have found some decent candidates for diversification (low-risk, high-reward quadrant). These include petroleum refining, construction planning, waste management, manufacturing of rail vehicles and consumer electronics.
+
+# **Useful references**
+* Neffke, F. M., Otto, A., & Weyh, A. (2017). Inter-industry labor flows. Journal of Economic Behavior & Organization, 142, 275-292.  
+* Lőrincz, L., Kiss, K. M., Elekes, Z., Csáfordi, Z., & Lengyel, B. (2019). Az iparágak közti hasonlóság mérésének hálózati módszerei és relevanciájuk a gazdaságfejlesztésben. Közgazdasági Szemle, 66(1), 22-52.  
