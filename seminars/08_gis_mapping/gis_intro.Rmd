@@ -1,0 +1,376 @@
+---
+title: "Introduction to GIS in R"
+output: 
+  html_document: 
+    toc: true
+---
+  
+```{r message=FALSE}
+library(sp) # this is an older, slower and murkier spatial library
+library(raster)
+library(rgeos)
+# https://stackoverflow.com/questions/51566741/updating-rgdal-in-r-3-5-1-c11-dependency-although-c11-is-available
+library(rgdal)
+library(leaflet)
+# sudo apt-get install libudunits2-dev
+# sudo apt-get install libgeos-3.7.0 libgeos-dev
+# sudo ln -s /usr/lib/x86_64-linux-gnu/libhdf5_cpp.so /usr/lib/x86_64-linux-gnu/libhdf5_cpp.so.103
+library(sf) # this is the more modern and effective version of sp
+library(magrittr) # this is for piping
+library(ggplot2)
+library(dplyr) # this is for manipulating data
+library(geojsonsf)
+```
+
+In many scenarios, either in simulations or when working with real-world data, it may be necessary to use concepts from geometry when programming. In the following, we are going to have a look at some possible cases, and in the second half of the notebook, we are going to add geometries to maps created from several input formats.
+
+## Computer representation of geometric objects
+
+First of all, we have to look at the fundamental building blocks of our spatial data. When we work with coordinates or boundaries of administrative units, we expect that the computer knows how to answer some very natural questions. Some examples are:
+
+  * Does a certain administrative unit contain a pair of coordinates?
+  * How long is a given road?
+  * What is the area of a country?
+  * Can I measure distances on the surface of the Earth? If yes, with what method/in what coordinate system?
+
+In `R`, the `sp` library used to be the most common library for creating spatial objects, but we'll shift to using `sf` at some points of this notebook. Our main focus will be on
+
+* points,
+* curves,
+* and polygons.
+
+### Points
+
+As a first example, here's a series of longitude and latitude pairs, out of which we'll create point objects.
+
+```{r}
+longitude <- c(-116.7, -120.4, -116.7, -113.5, -115.5, -120.8, -119.5, -113.7, -113.7, -110.7)
+latitude <- c(45.3, 42.6, 38.9, 42.1, 35.7, 38.9, 36.2, 39, 41.6, 36.9)
+lonlat <- cbind(longitude, latitude)
+pts <- SpatialPoints(lonlat)
+```
+
+Let's check what kind of objects `lonlat` and `pts` are!
+
+```{r results="hide"}
+class(lonlat)
+class(pts)
+```
+
+We can see, that while `lonlat` is just a `matrix`, where the first column contains the `x`, and the second the `y` coordinates of the points, `pts` has a more complex class called `SpatialPoints` from the package `sp`. This class already contains multiple points, not just one, keep it in mind when working with it!
+
+Let's see what properties (so-called slots, that you can access by using `@` after the variable name) are encoded in `pts` apart from the bare coordinates!
+
+```{r results="hide"}
+attributes(pts)
+```
+
+We can see that the slot `@coords` stores the same matrix from which we've created the points. But there is also a `@bbox` slot containing the smallest rectangle that encloses all the points. And can the the mysterious `@proj4string` be? We'll return to that later, this attribute contains information about the coordinate system of our points. Since we have not specified it, it should still be `NA` for our example `pts` variable.
+
+*Note, that `longitude` is the `x` coordinate of the points, although we usually give coordinate pairs in everyday life as `(lat,lon)` pairs. Whenever something very strange goes on in your code handling spatial data, think of the possibility that you mixed up `lat` and `lon` somewhere.*
+
+What happens, if we use the more modern `sf` approach? (This closely resembles the very popular `geopandas` library from Python, if you ever happen to try to switch languages...)
+
+```{r}
+st_as_sf(pts)
+```
+
+### Lines
+
+We can also represent general curves by using the `Line` class. Such a line contains the input `@coords`, but it still lacks the coordinate system information. Thus, this is just a general line.
+
+```{r}
+lon <- c(-116.8, -114.2, -112.9, -111.9, -114.2, -115.4, -117.7)
+lat <- c(41.3, 42.9, 42.4, 39.8, 37.6, 38.3, 37.6)
+lonlat <- cbind(lon, lat)
+single_line <- sp::Line(lonlat)
+print(single_line@coords)
+```
+
+A collection of multiple lines with spatial information is created with the `spLines` class. Here, the `@lines` slot contains all the different line pieces in a list, whose elements you can access by indexing. Note that the second element, apart from having `@coords`, also has an `@ID`, which is an identifier for this specific line piece within the collection of lines.
+
+```{r}
+multiple_lines <- spLines(lonlat[1:4,],lonlat[4:length(lonlat[,1]),])
+# or
+do.call(spLines,list(lonlat[1:4,],lonlat[4:length(lonlat[,1]),]))
+# accessing elements
+multiple_lines@lines[[2]]
+```
+
+For the whole line collection, we have the attributes `@bbox` and `@proj4string`, again containing the enclosing rectangle and the coordinate system information.
+
+Again, let's have a look at `sf` type:
+
+```{r}
+st_as_sf(multiple_lines)
+```
+
+### Polygons
+
+Finally, let's create a polygon out of the same coordinates used for `single_line`:
+
+```{r}
+single_polygon <- Polygon(lonlat)
+attributes(single_polygon)
+multiple_polygons <- spPolygons(lonlat)
+```
+
+This polygon still lacks spatial information, and apart from the familiar `@coords` slot, it now has `@hole` and `@ringDir`. These attributes become important when you'd like to create holes withon polygons, for example, you'd like to omit Budapest from the analysis of Pest county in Hungary. Then, the polygon represending Budapest would have `@hole=TRUE` and `@ringDir=-1`, where `@ringDir` indicates a counterclockwise plotting[???] direction. `@labpt` is important for plotting, it stores the label position for the polygon. (E.g. you'd like to put the name of each county on the map.)
+
+
+```{r}
+plot(multiple_polygons, col="red")
+plot(multiple_lines,col=c("dark green","dark blue"), lw=5, add=T)
+plot(pts,pch=19,add=T)
+```
+Note that while the line is not closed, the polygon is!
+
+## Adding a CRS to the geometric objects
+
+Now let's focus on the `@proj4string` slots of our spatial geometric objects. This is the attribute that stores information about the coordinate reference system  (CRS) in which the coordinates of our point, line or polygon are recorded. There are multiple reasons there is not an obivous good choice for a CRS when storing spatial objects. The surface of the Earth is only roughly a sphere, and depending on the application, we might want more or less sophisticated corrections in modeling its shape. Or the usual lat-lon coordinates are in a spherical coordinate system, therefore, it is not easy to calculate the distance between two points on the surface of the earch. In this case, we use a possible Cartesian projection of this sphere (this is how you can draw the map of the world on a sheet of paper).
+
+For a more detailed description, check out the [documentation](https://rspatial.org/raster/spatial/6-crs.html) of the `sp` package. It also contains a link to the most commonly used projection CRS-es. The CRS definition and the projections are usually contained in some programming libraries: you never have to write them for yourself.
+
+For now, we'll only use two simple systems: latitudes and longitudes, and a Cartesian projection in which you can measure distances using the easiest Cartesian formulas. The most common projections and CRSs have a so-called [EPSG code](https://en.wikipedia.org/wiki/EPSG_Geodetic_Parameter_Dataset) that simplifies their calls, e.g. the latlon system is 4326, and the [Mercator projection](https://en.wikipedia.org/wiki/Web_Mercator_projection) is 3857.
+
+```{r}
+longitude <- c(-116.7, -120.4, -116.7, -113.5, -115.5, -120.8, -119.5, -113.7, -113.7, -110.7)
+latitude <- c(45.3, 42.6, 38.9, 42.1, 35.7, 38.9, 36.2, 39, 41.6, 36.9)
+lonlat <- cbind(longitude, latitude)
+crsinfo <- sp::CRS("+init=epsg:4326")
+pts <- SpatialPoints(lonlat,proj4string = crsinfo)
+```
+
+How to we convert between two systems?
+
+```{r}
+old_crs = CRS("+init=epsg:4326")
+new_crs = CRS("+init=epsg:3857")
+
+projected_points = sp::spTransform(pts,new_crs)
+plot(projected_points)
+```
+
+Note how the relative position of these points barely changed, but the `(x,y)` values are now very different from the original lon-lat positions. The points are now embedded into a Cartesian system, where we can simply measure their distance by using the  Pythagorean theorem.
+
+
+How do we obtain the same projection for `sf` objects?
+```{r}
+pts_sf <- st_as_sf(pts) %>% st_transform(new_crs)
+pts_sf
+```
+
+## Drawing nice interactive maps
+
+If we do the data analysis in R, then it would be convenient to put our data on a map in R, too. There are some libraries that enable the usage of the powerful and lightweight [Leaflet.js](https://leafletjs.com/) library in R In the following cells, we are going to have a look at some basic functionalities of these maps in Folium.
+
+Let's display the inner city of Budapest!
+
+```{r}
+m <- leaflet::leaflet()
+m <- setView(m, lng = 19.05, lat = 47.5, zoom = 13)
+m <- addTiles(m)
+m
+```
+The map used the tiles of the https://openstreetmap.org freely available database. There are many other options depending on our aims, see https://rstudio.github.io/leaflet/basemaps.html. A rather common approach for example is:
+
+```{r}
+m <- addProviderTiles(m, provider = providers$CartoDB.Positron)
+m
+```
+
+Let's add some useful objects to our map!
+
+```{r}
+m <-setView(m, lng = 19.05, lat = 47.47, zoom = 14)
+m <- addMarkers(m, lng=19.06, lat = 47.47, popup="ELTE")
+m
+```
+
+Which projection does our map use? What bounding box do we see on it?
+
+```{r output=FALSE}
+m$x$options$crs$crsClass
+m$x$limits
+```
+
+## Combining data and spatial objects
+
+In most real-life applications, our aim is to combine some kind of data with our spatial objects. E.g. we'd like to color countries according to GDP per capita.
+
+For this, the library `sp` has special dataframe classes, that might contain points, lines or polygons in each row. We are going to try out some simple operations on Hungarian county and highway data. You can download the county dataset from here: https://data2.openstreetmap.hu/hatarok/index.php?admin=6. It contains so-called shapefiles that store the geometric information and the metadata as well. 
+
+```{r}
+sdf <- readOGR("./shapes/admin6.shp")
+head(sdf)
+class(sdf)
+plot(sdf)
+sdf@data
+pest_megye <- sdf@polygons[[14]]
+pest_megye@Polygons[[2]]@hole
+```
+Or rather as `sf` class, it also works very well with `ggplot`!!!
+
+```{r}
+sdf <- st_read('shapes/admin6.shp') %>% st_transform(new_crs)
+head(sdf)
+class(sdf)
+ggplot(sdf) + geom_sf()
+```
+
+Leaflet can handle both classes!
+
+```{r}
+#sdf <- readOGR("./shapes/admin6.shp") %>% spTransform(old_crs)
+# a very annoying bug!!!
+read_sf("./shapes/admin6.shp")
+# if we don't set the crs by hand, it'll shift the polygons to the north
+sdf <- read_sf("./shapes/admin6.shp", crs = 3785) %>% st_transform(old_crs)
+hungary <- leaflet(sdf) %>% 
+  addTiles() %>% 
+  addPolygons(
+    color = "#444444",
+    weight = 3, 
+    smoothFactor = 0.5, 
+    highlightOptions = highlightOptions(
+      fillColor = "#ffffff",
+      fillOpacity=1,
+      weight = 5,
+      bringToFront = TRUE
+    )
+  )
+```
+
+Do these shapes give us the total area of Hungary (~93000 km^2)?
+
+```{r}
+sum(st_area(sdf))/1e6
+```
+
+Which is the biggest county?
+
+```{r}
+as.character(sdf$NAME[which.max(st_area(sdf))])
+```
+
+Let us create a list of neighboring counties.
+
+```{r}
+sdf_buffered <- st_read("./shapes/admin6.shp") %>% st_buffer(500)
+sdf_intersections <- st_intersects(sdf_buffered,sdf_buffered)
+sdf[sdf_intersections[[1]],]
+```
+
+Now let's try combining two spatial dataframes! We'll use the railway map of Hungary obtained from OpenStreetMap!
+
+```{r}
+railways <- st_read('./shapes/gis.osm_railways_free_1.shp',crs=4326)
+head(railways)
+plot(railways)
+project_crs = CRS("+init=epsg:3395")
+
+sdf <- sdf %>% st_transform(project_crs)
+railways <- railways %>% st_transform(project_crs)
+```
+
+A possible sensible question:
+
+Which county has the longest railway network in Hungary? 
+
+It is important from here on to use `sf`, since it builds [spatial indices](https://gistbok.ucgis.org/bok-topics/spatial-indexing) before any spatial joins, which is crucial for efficiency. 
+
+See https://insileco.github.io/2017/09/12/efficiency-of-spatial-intersects-in-r/ for example.
+
+```{r}
+railways_to_counties = data.frame(st_intersects(railways,sdf))
+colnames(railways_to_counties) <- c("id","county.id")
+railways <- railways[railways_to_counties$id,]
+railways$county.id <- railways_to_counties$county.id
+railways$length = st_length(railways)
+county_lengths <- 
+  data.frame(railways) %>% 
+    group_by(county.id) %>% 
+    summarise(total_length=sum(length)/1000) %>% 
+    arrange(desc(total_length))
+county_lengths$name = sdf[county_lengths$county.id,]$NAME
+head(county_lengths,3)
+```
+
+## A very important format: GeoJSON
+
+GeoJSON is a very flexible exchange format in the 4326 coordinate system used by numerous applications and services. It is very much portable, and therefore, useful to know its structure. 
+
+* If you already know what a JSON file is, stop reading, this is only a nested JSON with special keys.
+* If you know what a Python dictionary is, stop reading, a GeoJSON is a special dictionary with preset keys and specified value types represented as a text.
+* If you know how to build a webpage, you can assume that a GeoJSON is like an HTML: there is a nested structure of labelled elements, where "tags" are called keys, and the HTML content under a certain tag is a value.
+* If you still have no clue, here's an example:
+
+```{r}
+library(geojsonR)
+
+str_js = '{ "type": "MultiPolygon", 
+            "coordinates": [
+                [[[102.0, 2.0], [103.0, 2.0], [103.0, 3.0], [102.0, 3.0], [102.0, 2.0]]],
+                [[[100.0, 0.0], [101.0, 0.0], [101.0, 1.0], [100.0, 1.0], [100.0, 0.0]],
+                 [[100.2, 0.2], [100.8, 0.2], [100.8, 0.8], [100.2, 0.8], [100.2, 0.2]]]
+                ]
+}'
+
+
+char_js = FROM_GeoJson(url_file_string = str_js)
+
+char_js
+```
+
+```
+calif <- leaflet() %>% fitBounds(-124.48,32.53,-114.13,42.01) %>% addTiles() %>% addGeoJSON(paste0(readLines("https://raw.githubusercontent.com/mlampros/DataSets/master/california.geojson"),collapse=""))
+calif
+```
+
+
+# Exercises
+
+[John Snow](https://en.wikipedia.org/wiki/John_Snow) was an English physician, who was first to trace the source of a cholera outbreak in London's Soho district in 1854 using data visualization. In the following exercises, we are going to reconstruct the map of Snow with modern tools.
+
+<img src="https://upload.wikimedia.org/wikipedia/commons/2/27/Snow-cholera-map-1.jpg" width="400px"></img>
+
+Though there is a whole [R library](https://vincentarelbundock.github.io/Rdatasets/doc/HistData/Snow.pumps.html) dedicated to this dataset, we would like R users to also build the solutions (e.g. Voronoi cells) from scratch.
+
+Further reading:
+* https://en.wikipedia.org/wiki/1854_Broad_Street_cholera_outbreak
+* https://www1.udel.edu/johnmack/frec682/cholera/cholera2.html
+* https://www.theguardian.com/news/datablog/interactive/2013/mar/15/cholera-map-john-snow-recreated
+
+The shapefile that will be used in these exercises are located at http://donboyes.com/2011/10/14/john-snow-and-serendipity/, but they are already downloaded into the shapes directory.
+
+## Exercise 1
+
+Load the death and the pump dataset into a tabular format! Have a look at the dataset's structure! The pump dataset contains the locations of wells, that were used to obtain water for drinking, cooking etc.
+
+*It is sometimes worth to have a look at a shapefile's content quickly. For Linux, [QGIS](https://www.qgis.org/en/site/about/index.html) is a powerful free GIS system, try it at home!*
+
+## Exercise 2
+
+Extract the latitudes and the longitudes for each row in both datasets as additional columns!
+
+The 'X' and 'Y' columns are coordinates in an arbitrary coordinate system and usually not part of a *shp* file. 
+
+Project your points into a coordinate system where you can measure real distances, then create a meaningful visualization of the data!
+
+## Exercise 3
+
+How many deaths were within a given radius around the wells? Test for a series of radiuses. Visualize your results!
+
+## Exercise 4
+
+Put both the deaths and the pumps on a zoomable Leaflet map that has a base layer from a tile server different from that of the default settings of your chosen method. Set the appropriate map center and zoom level. Use different markers for the deaths and the pumps datasets.
+
+## Exercise 5
+
+Calculate the Voronoi cells for the pumps, and count the number of deaths falling into each of the cells.  Create a bar chart of the number of deaths in each cell. Pinpoint the possible source of the infection.
+
+*Store the Voronoi cells in an sf object, then you can easily do a spatial join (e.g. testing whether a polygon in the Voronoi dataframe contains a point from the death dataframe).*
+
+## Exercise 6
+
+Put the Voronoi cells on the map, colored according to the number of deaths (like on a heatmap/create a so-called choropleth).
