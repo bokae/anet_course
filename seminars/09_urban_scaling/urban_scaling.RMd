@@ -25,7 +25,8 @@ project_crs <- sf::st_crs("+init=epsg:23700")
 The following file has been downloaded from Geofabrik, it contains all the OpenStreetMap settlement center data from Hungary. We load the dataset, then transform it to our desired coordinate system.  We filter the dataset to leave out villages and Bratislava, that somehow happened to land in a Hungarian dataset. We can see the settlement classes in the `fclass` attribute of the dataset.
 
 ```{r}
-settlements <- sf::read_sf('shapes/gis_osm_places_free_1.shp') %>% st_transform(project_crs)
+settlements <- sf::read_sf('shapes/gis_osm_places_free_1.shp')  %>% 
+  st_transform(project_crs)
 head(settlements)
 unique(settlements$fclass)
 plot(settlements["fclass"])
@@ -33,7 +34,8 @@ plot(settlements["fclass"])
 Let's filter the above data to cities. We actually get back the 326 cities in Hungary (compared to Wikipedia data, we could have chosen a more accurate validation...)
 
 ```{r}
-cities <- settlements %>% filter(fclass == "town" | fclass == "city" | fclass == "national_capital" & name != "Bratislava")
+cities <- settlements %>% 
+    filter(fclass == "town" | fclass == "city" | fclass == "national_capital" & name != "Bratislava")
 plot(cities["fclass"])
 head(cities)
 ```
@@ -41,18 +43,27 @@ head(cities)
 The next file is still an OSM dump, it contains amenity coordinates. Each record contains a so-called `fclass` field, that corresponds to the type of the amenity.
 
 ```{r}
-places <- sf::read_sf('shapes/gis_osm_pois_free_1.shp') %>% st_transform(project_crs)
+places <- sf::read_sf('shapes/gis_osm_pois_free_1.shp') %>% 
+  st_transform(project_crs)
 head(places)
 sort(unique(places$fclass))
 interesting <- c("atm","bank","bar","cafe","pharmacy","supermarket","convenience","pub", "playground")
-places <- places %>% filter(fclass %in% interesting)
-head(places %>% as.data.frame %>%group_by(fclass) %>% summarise(total = n()))
+places <- places %>% 
+  filter(fclass %in% interesting)
+head(places %>% 
+       as.data.frame %>%
+       group_by(fclass) %>% 
+       summarise(total = n())
+     )
 ```
 
 Where are all the pubs?
 
 ```{r}
-plot(places %>% filter(fclass=="pub") %>% select(code))
+plot(places %>% 
+       filter(fclass=="pub") %>% 
+       select(code)
+     )
 ```
 
 How do we sort the amenities into cities? For that, here's an administrative boundary file from https://data2.openstreetmap.hu/hatarok/index.php?admin=8. This is also OSM data, but it was somehow missing from the previous dump.
@@ -60,14 +71,19 @@ How do we sort the amenities into cities? For that, here's an administrative bou
 
 ```{r}
 
-settlement_shapes <- sf::read_sf('shapes/admin8.shp') %>% st_transform(project_crs)
+settlement_shapes <- sf::read_sf('shapes/admin8.shp') %>% 
+  st_transform(project_crs)
 plot(settlement_shapes["ADMIN_LEVE"])
 ```
 We first join the city centers with population data to the administrative boundaries.
 
 ```{r}
-indexmap <- settlement_shapes %>% sf::st_contains(cities) %>% as.data.frame %>% set_colnames(c("id1","id2")) 
-cities_w_pop <- cbind(settlement_shapes[indexmap$id1,],cities[indexmap$id2,])%>% select(-geometry.1)
+indexmap <- settlement_shapes %>% 
+  sf::st_contains(cities) %>% 
+  as.data.frame %>% 
+  set_colnames(c("id1","id2")) 
+cities_w_pop <- cbind(settlement_shapes[indexmap$id1,],cities[indexmap$id2,]) %>% 
+  select(-geometry.1)
 cities_w_pop$log_pop <- log10(cities_w_pop$population)
 plot(cities_w_pop["log_pop"])
 ```
@@ -75,9 +91,17 @@ plot(cities_w_pop["log_pop"])
 Then we can  ask whether the OSM amenities fall within an administrative boundary. We create a dataframe called `scaling_data` from some interesting variables.
 
 ```{r}
-indexmap <- cities_w_pop %>% st_contains(places) %>% as.data.frame %>% set_colnames(c("id1","id2")) 
-cities_w_places <- cbind(cities_w_pop[indexmap$id1,],places[indexmap$id2,]) %>% select(-geometry.1)
-scaling_data <- cities_w_places %>% as.data.frame %>% group_by(name,fclass.1,population) %>% count() %>% pivot_wider(names_from = fclass.1, values_from = n)
+indexmap <- cities_w_pop %>% 
+  st_contains(places) %>% 
+  as.data.frame %>% 
+  set_colnames(c("id1","id2")) 
+cities_w_places <- cbind(cities_w_pop[indexmap$id1,],places[indexmap$id2,]) %>% 
+  select(-geometry.1)
+scaling_data <- cities_w_places %>% 
+  as.data.frame %>% 
+  group_by(name,fclass.1,population) %>% 
+  count() %>% 
+  pivot_wider(names_from = fclass.1, values_from = n)
 ```
 
 ## Fitting urban scaling relationships
@@ -87,14 +111,24 @@ Now we calculate some helper variables, and we merge some of the classes like `p
 ```{r}
 scaling_data$log10_pop = log10(scaling_data$population)
 scaling_data$log_pop = log(scaling_data$population)
-scaling_data$bolt = scaling_data$supermarket %>% replace_na(0) + scaling_data$convenience %>% replace_na(0)
-scaling_data$kocsma = scaling_data$bar %>% replace_na(0) + scaling_data$pub %>% replace_na(0)
+scaling_data$bolt = 
+  scaling_data$supermarket %>% replace_na(0) + 
+  scaling_data$convenience %>% replace_na(0)
+scaling_data$kocsma = 
+  scaling_data$bar %>% replace_na(0) + 
+  scaling_data$pub %>% replace_na(0)
 ```
 And here are our first urban scaling plots.
 
 ```{r}
-ggplot(scaling_data) + geom_point(aes(x=population,y=kocsma)) + scale_x_log10() + scale_y_log10() 
-ggplot(scaling_data) + geom_point(aes(x=population,y=bolt)) + scale_x_log10() + scale_y_log10() 
+ggplot(scaling_data) + 
+  geom_point(aes(x=population,y=kocsma)) + 
+  scale_x_log10() + 
+  scale_y_log10() 
+ggplot(scaling_data) + 
+  geom_point(aes(x=population,y=bolt)) + 
+  scale_x_log10() + 
+  scale_y_log10() 
 ```
 
 Let's fit kocsma scaling with 3 different methods: OLS, NLS and MLE.
@@ -103,7 +137,8 @@ Let's fit kocsma scaling with 3 different methods: OLS, NLS and MLE.
 col = "kocsma"
 newcol = paste0(col,"_log")
 scaling_data[newcol] = log(scaling_data[col])
-fit_data <- scaling_data %>% filter(kocsma>0 & population>0)
+fit_data <- scaling_data %>% 
+  filter(kocsma>0 & population>0)
 ols <- lm(kocsma_log ~ log_pop, data = fit_data)
 ols
 nonlin_ls <- nls(kocsma~a*exp(b*log(population)),start=list(a=1e-1,b=1),data=fit_data)
