@@ -1,0 +1,165 @@
+
+---
+title: "Urban scaling in OSM POI data"
+output: html_document
+---
+
+## Spatial data preparation
+
+In the following notebook, we'll apply some of the GIS concepts and methods from the last seminar, and we'll fit the urban scaling relationship of Hungarian "kocsma" data! First, let's load the necessary libraries.
+
+```{r message=FALSE}
+library(sf)
+library(magrittr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+This is going to be our working Cartesian coordinate system. This code corresponds to the so-called EOV system, that is the most commonly used Cartesian coordinate system for Hungary.
+
+```{r message=FALSE}
+project_crs <- sf::st_crs("+init=epsg:23700")
+```
+
+The following file has been downloaded from Geofabrik, it contains all the OpenStreetMap settlement center data from Hungary. We load the dataset, then transform it to our desired coordinate system.  We filter the dataset to leave out villages and Bratislava, that somehow happened to land in a Hungarian dataset. We can see the settlement classes in the `fclass` attribute of the dataset.
+
+```{r}
+settlements <- sf::read_sf('shapes/gis_osm_places_free_1.shp') %>% st_transform(project_crs)
+head(settlements)
+unique(settlements$fclass)
+plot(settlements["fclass"])
+```
+Let's filter the above data to cities. We actually get back the 326 cities in Hungary (compared to Wikipedia data, we could have chosen a more accurate validation...)
+
+```{r}
+cities <- settlements %>% filter(fclass == "town" | fclass == "city" | fclass == "national_capital" & name != "Bratislava")
+plot(cities["fclass"])
+head(cities)
+```
+
+The next file is still an OSM dump, it contains amenity coordinates. Each record contains a so-called `fclass` field, that corresponds to the type of the amenity.
+
+```{r}
+places <- sf::read_sf('shapes/gis_osm_pois_free_1.shp') %>% st_transform(project_crs)
+head(places)
+sort(unique(places$fclass))
+interesting <- c("atm","bank","bar","cafe","pharmacy","supermarket","convenience","pub", "playground")
+places <- places %>% filter(fclass %in% interesting)
+head(places %>% as.data.frame %>%group_by(fclass) %>% summarise(total = n()))
+```
+
+Where are all the pubs?
+
+```{r}
+plot(places %>% filter(fclass=="pub") %>% select(code))
+```
+
+How do we sort the amenities into cities? For that, here's an administrative boundary file from https://data2.openstreetmap.hu/hatarok/index.php?admin=8. This is also OSM data, but it was somehow missing from the previous dump.
+
+
+```{r}
+
+settlement_shapes <- sf::read_sf('shapes/admin8.shp') %>% st_transform(project_crs)
+plot(settlement_shapes["ADMIN_LEVE"])
+```
+We first join the city centers with population data to the administrative boundaries.
+
+```{r}
+indexmap <- settlement_shapes %>% sf::st_contains(cities) %>% as.data.frame %>% set_colnames(c("id1","id2")) 
+cities_w_pop <- cbind(settlement_shapes[indexmap$id1,],cities[indexmap$id2,])%>% select(-geometry.1)
+cities_w_pop$log_pop <- log10(cities_w_pop$population)
+plot(cities_w_pop["log_pop"])
+```
+
+Then we can  ask whether the OSM amenities fall within an administrative boundary. We create a dataframe called `scaling_data` from some interesting variables.
+
+```{r}
+indexmap <- cities_w_pop %>% st_contains(places) %>% as.data.frame %>% set_colnames(c("id1","id2")) 
+cities_w_places <- cbind(cities_w_pop[indexmap$id1,],places[indexmap$id2,]) %>% select(-geometry.1)
+scaling_data <- cities_w_places %>% as.data.frame %>% group_by(name,fclass.1,population) %>% count() %>% pivot_wider(names_from = fclass.1, values_from = n)
+```
+
+## Fitting urban scaling relationships
+
+Now we calculate some helper variables, and we merge some of the classes like `pub` and `bar` to kocsma.
+
+```{r}
+scaling_data$log10_pop = log10(scaling_data$population)
+scaling_data$log_pop = log(scaling_data$population)
+scaling_data$bolt = scaling_data$supermarket %>% replace_na(0) + scaling_data$convenience %>% replace_na(0)
+scaling_data$kocsma = scaling_data$bar %>% replace_na(0) + scaling_data$pub %>% replace_na(0)
+```
+And here are our first urban scaling plots.
+
+``{r}
+ggplot(scaling_data) + geom_point(aes(x=population,y=kocsma)) + scale_x_log10() + scale_y_log10() 
+ggplot(scaling_data) + geom_point(aes(x=population,y=bolt)) + scale_x_log10() + scale_y_log10() 
+```
+
+Let's fit kocsma scaling with 3 different methods: OLS, NLS and MLE.
+
+```{r}
+col = "kocsma"
+newcol = paste0(col,"_log")
+scaling_data[newcol] = log(scaling_data[col])
+fit_data <- scaling_data %>% filter(kocsma>0 & population>0)
+ols <- lm(kocsma_log ~ log_pop, data = fit_data)
+ols
+nonlin_ls <- nls(kocsma~a*exp(b*log(population)),start=list(a=1e-1,b=1),data=fit_data)
+nonlin_ls
+
+```
+Plotting our results:
+
+```{r}
+fit_data$kocsma_predict_ols = exp(predict(ols,newdata = fit_data))
+fit_data$kocsma_predict_nls = predict(nonlin_ls,newdata=fit_data)
+ggplot(fit_data) + 
+  geom_point(aes(x=population,y=kocsma)) + 
+  geom_line(aes(x=population,y=kocsma_predict_ols)) +
+  geom_line(aes(x=population,y=kocsma_predict_nls),color='red') +
+  scale_x_log10() +
+  scale_y_log10() 
+```
+
+Creating a maximum likelihood function according to the person model of Leitao et al. (2016), plotting the LL as a function of the parameter, selecting maximum LL parameter, plotting all three fitting methods together.
+
+```{r}
+
+x=fit_data$population
+y=fit_data$kocsma
+ytot = sum(y)
+
+Z <- function(beta){
+  return(sum(x**beta))
+}
+
+LL <- function(beta){
+  R =y*log(x**beta/Z(beta))
+  return(sum(R[!is.infinite(R)]))
+}
+
+t=seq(from = 0.8, to = 1.2, by = 0.001)
+lt <- lapply(t,LL)
+final_beta <- t[which.max(lt)]
+
+fit_data$kocsma_predict_mle = ytot/Z(final_beta)*fit_data$population**final_beta
+ggplot(fit_data) + 
+  geom_point(aes(x=population,y=kocsma)) + 
+  geom_line(aes(x=population,y=kocsma_predict_ols)) +
+  geom_line(aes(x=population,y=kocsma_predict_nls),color='red') +
+  geom_line(aes(x=population,y=kocsma_predict_mle),color='blue') +
+  scale_x_log10() +
+  scale_y_log10() 
+
+## Calculate BIC!
+
+```
+
+Are SAMIs different than per-capita indicators?
+
+```{r}
+fit_data$name[order(-log(fit_data$kocsma/fit_data$kocsma_predict_mle))][0:20]
+fit_data$name[order(-fit_data$kocsma/fit_data$population)][0:20]
+```
