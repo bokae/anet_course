@@ -92,7 +92,7 @@ scaling_data$kocsma = scaling_data$bar %>% replace_na(0) + scaling_data$pub %>% 
 ```
 And here are our first urban scaling plots.
 
-``{r}
+```{r}
 ggplot(scaling_data) + geom_point(aes(x=population,y=kocsma)) + scale_x_log10() + scale_y_log10() 
 ggplot(scaling_data) + geom_point(aes(x=population,y=bolt)) + scale_x_log10() + scale_y_log10() 
 ```
@@ -116,11 +116,12 @@ Plotting our results:
 fit_data$kocsma_predict_ols = exp(predict(ols,newdata = fit_data))
 fit_data$kocsma_predict_nls = predict(nonlin_ls,newdata=fit_data)
 ggplot(fit_data) + 
-  geom_point(aes(x=population,y=kocsma)) + 
-  geom_line(aes(x=population,y=kocsma_predict_ols)) +
-  geom_line(aes(x=population,y=kocsma_predict_nls),color='red') +
+  geom_point(aes(x=population,y=kocsma,color="data")) + 
+  geom_line(aes(x=population,y=kocsma_predict_ols,color="OLS")) +
+  geom_line(aes(x=population,y=kocsma_predict_nls,color="NLS")) +
   scale_x_log10() +
-  scale_y_log10() 
+  scale_y_log10() +
+  scale_color_discrete(name  ="Methods")
 ```
 
 Creating a maximum likelihood function according to the person model of Leitao et al. (2016), plotting the LL as a function of the parameter, selecting maximum LL parameter, plotting all three fitting methods together.
@@ -142,19 +143,26 @@ LL <- function(beta){
 
 t=seq(from = 0.8, to = 1.2, by = 0.001)
 lt <- lapply(t,LL)
+
+plot(t,lt)
+```
+
+We choose the maximum likelihood exponent to be our final beta for this method.
+
+```{r}
+
 final_beta <- t[which.max(lt)]
+print(final_beta)
 
 fit_data$kocsma_predict_mle = ytot/Z(final_beta)*fit_data$population**final_beta
 ggplot(fit_data) + 
-  geom_point(aes(x=population,y=kocsma)) + 
-  geom_line(aes(x=population,y=kocsma_predict_ols)) +
-  geom_line(aes(x=population,y=kocsma_predict_nls),color='red') +
-  geom_line(aes(x=population,y=kocsma_predict_mle),color='blue') +
+  geom_point(aes(x=population,y=kocsma,color="data")) + 
+  geom_line(aes(x=population,y=kocsma_predict_ols,color="OLS")) +
+  geom_line(aes(x=population,y=kocsma_predict_nls,color='NLS')) +
+  geom_line(aes(x=population,y=kocsma_predict_mle,color='MLE')) +
   scale_x_log10() +
-  scale_y_log10() 
-
-## Calculate BIC!
-
+  scale_y_log10() +
+  scale_color_discrete(name  ="Methods")
 ```
 
 Are SAMIs different than per-capita indicators?
@@ -162,4 +170,11 @@ Are SAMIs different than per-capita indicators?
 ```{r}
 fit_data$name[order(-log(fit_data$kocsma/fit_data$kocsma_predict_mle))][0:20]
 fit_data$name[order(-fit_data$kocsma/fit_data$population)][0:20]
+```
+
+Is this model more likely than a linear one? At least we can be sure it is.
+
+```{r}
+delta_bic = -2*LL(1)+2*LL(final_beta)
+delta_bic
 ```
