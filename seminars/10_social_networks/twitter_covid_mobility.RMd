@@ -1,0 +1,111 @@
+---
+title: "Working with Social Network Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Measuring the effectiveness of a lockdown
+
+
+## Twitter dataset
+
+https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/tweet-object
+https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/user-object
+https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/geo-objects#coordinates
+https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/geo-objects#place
+
+```{r}
+library(bit64)
+library(data.table)
+
+tweet_colnames = c(
+  "user_id",
+  "tweet_id",
+  "created_at",
+  "lat",
+  "lon",
+  "place_id"
+)
+tweet = fread('gyak_italy_tweets.rpt',col.names = tweet_colnames)
+# View(tweet)
+
+place_colnames = c(
+  "place_id",
+  "place_type",
+  "full_name",
+  "country_code",
+  "lon_min",
+  "lat_min",
+  "lon_max",
+  "lat_max"
+)
+place = fread('gyak_italy_places.rpt',col.names = place_colnames)
+# View(place)
+
+user_colnames = c(
+  "user_id",
+  "created_at",
+  "screen_name",
+  "favourites_count",
+  "friends_count",
+  "followers_count",
+  "statuses_count",
+  "geo_enabled",
+  "lang",
+  "verified"
+)
+user = fread('gyak_italy_users.rpt',col.names = user_colnames)
+# View(user)
+```
+
+
+## Data preparation
+
+Create a daily timeline for the tweet counts. Also, create a geographical distribution of the data using the administraticve regions of Italy, and put the total counts on the map. If you still have some time, create an average weekly timeline of the tweet counts by extracting the hour of the week from the data (1-168), and adding up all Monday 8AMs, Monday 9AMs etc. What do you see?
+
+*Present your findings to the class using illustrative plots.*
+
+
+There are many automated users on Twitter, some studies estimate that a significant amount of the generated content comes from these bots. It is very likely, that the above data also contains bots. Try to establish a method that filters most possible bots out of this dataset, while leaving "normal" users intact. You can use multiple different user attributes as well as location/timing of tweets from the tweet dataframe! First, start with the `user` table, then if you have more time, add attributes from the `tweet` table. 
+
+*As a result, please have a list of `user_id`s, who you expect to be bots.*
+
+Put some place bounding boxes on an interactive map. Are they correct? Choose your examples from different place types. For every single line in the place datafile, calculate the bounding box centroid and the length of the diagonal in km. What do you think, which places are trustable for an analysis?
+
+*Please provide the criteria for places to be included to/excluded from the analysis. You should provide me a final filtered `place` dataframe only containing the rows that we should use.*
+
+There are two possibilities of detecting location from Twitter data. A minor portion of the users opt-in to have their exact GPS-coordinates shared alongside their messages. But Twitter's default method assigns a place to a tweet, and the place gets a unique id called place_id. For those users, who share their coordinates, the place_id field is filled out most of the time. Try to cross-validate the two location methods! How far are the exact coordinates from the center of the place bounding boxes? What are the most common place types you get for a coordinate? Find some very good/very bad examples. Put them on a zoomable map.
+
+*Present your findings to the class using illustrative plots.*
+
+Create some daily paths of users from the dataset. Select users for whom you have at least 5 tweets per day, put their motion on a zommable map with points + lines connecting the points. Use cartodbpositron tiling and red points/lines. Put the created_at field of the tweets as a small label next to the points. Select the best examples to show to your classmates.
+
+*Present your findings to the class using illustrative plots.*
+
+## A possible result
+
+### Bot filtering of users
+
+### Location filtering of bad place_ids
+
+### Calculating consecutive tweet distances
+```{r}
+library(dplyr)
+library(magrittr)
+library(sf)
+
+
+place$center_lon = (place$lon_min + place$lon_max)/2
+place$center_lat = (place$lat_min + place$lat_max)/2
+place$
+
+tweet %>% arrange(user_id,tweet_id) %>% group_by(user_id) %>% mutate(flag = row_number()) %>% head(1000)
+
+```
+
+
+### Summarizing displacement/user/day, creating the final chart
+
+
