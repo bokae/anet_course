@@ -8,20 +8,31 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 ## Measuring the effectiveness of a lockdown
 
+Due to the pandemic caused by the SARS-COV-19 virus, goverments worldwide introduce lockdown measures of different strictness. According to epidemic simulations, reductions in the mixing and movement of populations is crucial to "flattening the curve", to mitigate the adverse effects of an exponentially spreading pandemic. Even is lockdowns are lifted, a certain amount of social distancing and mobility reduction has to be in place to combat the spreading alongside with complementary measures such as quarantining positive people, extensive testing and public mask wearing. 
+
+But how can we measure the compliance of a population with lockdown measures? Google has given out its so-called mobility report, that gives us aggregate estimates about the reduction of the number of times certain types of places have been visited by residents. We don't have the database of Google, so we turn to the poor man's ultimate social media datasource: Twitter. Twitter is a popular microblogging platform, where an API provides at most 1% of all the messages sent there. In this seminar, we'll have a look at a small, but very current Twitter datset, and explore whether we can see any effect in people's mobility before and after the national lockdown of Italy.
 
 ## Twitter dataset
+
+The Twitter data comes in a nested JSON format, I've already flattened and prepared some csv files for you (they might be called rpt, and they are gzipped to make them smaller). Here are the column documentations.
 
 https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/tweet-object
 https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/user-object
 https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/geo-objects#coordinates
 https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/geo-objects#place
 
-```{r}
+Let's load the data!
+
+```{r message=F}
 # install.packages('bit64')
 # install.packages('R.utils')
 
 library(bit64)
 library(data.table)
+library(dplyr)
+library(magrittr)
+library(sf)
+
 
 tweet_colnames = c(
   "user_id",
@@ -64,26 +75,36 @@ user = fread('gyak_italy_users.rpt.gz',col.names = user_colnames)
 ```
 
 
-## Data preparation
+## Data preparation - done in groups
+
+### Time dimension
 
 Create a daily timeline for the tweet counts. Also, create a geographical distribution of the data using the administraticve regions of Italy, and put the total counts on the map. If you still have some time, create an average weekly timeline of the tweet counts by extracting the hour of the week from the data (1-168), and adding up all Monday 8AMs, Monday 9AMs etc. What do you see?
 
 *Present your findings to the class using illustrative plots.*
 
+### Bot filtering
 
 There are many automated users on Twitter, some studies estimate that a significant amount of the generated content comes from these bots. It is very likely, that the above data also contains bots. Try to establish a method that filters most possible bots out of this dataset, while leaving "normal" users intact. You can use multiple different user attributes as well as location/timing of tweets from the tweet dataframe! First, start with the `user` table, then if you have more time, add attributes from the `tweet` table. 
 
 *As a result, please have a list of `user_id`s, who you expect to be bots.*
 
-Put some place bounding boxes on an interactive map. Are they correct? Choose your examples from different place types. For every single line in the place datafile, calculate the bounding box centroid and the length of the diagonal in km. What do you think, which places are trustable for an analysis?
-
-*Please provide the criteria for places to be included to/excluded from the analysis. You should provide me a final filtered `place` dataframe only containing the rows that we should use.*
+### Place validation 1.
 
 There are two possibilities of detecting location from Twitter data. A minor portion of the users opt-in to have their exact GPS-coordinates shared alongside their messages. But Twitter's default method assigns a place to a tweet, and the place gets a unique id called place_id. For those users, who share their coordinates, the place_id field is filled out most of the time. Try to cross-validate the two location methods! How far are the exact coordinates from the center of the place bounding boxes? What are the most common place types you get for a coordinate? Find some very good/very bad examples. Put them on a zoomable map.
 
 *Present your findings to the class using illustrative plots.*
 
-Create some daily paths of users from the dataset. Select users for whom you have at least 5 tweets per day, put their motion on a zommable map with points + lines connecting the points. Use cartodbpositron tiling and red points/lines. Put the created_at field of the tweets as a small label next to the points. Select the best examples to show to your classmates.
+
+### Place validation 2.
+
+Put some place bounding boxes on an interactive map. Are they correct? Choose your examples from different place types. For every single line in the place datafile, calculate the bounding box centroid and the length of the diagonal in km. What do you think, which places are trustable for an analysis?
+
+*Please provide the criteria for places to be included to/excluded from the analysis. You should provide me a final filtered `place` dataframe only containing the rows that we should use.*
+
+### Understanding user mobility
+
+Create some daily paths of users from the dataset. Select users for whom you have at least 5 tweets per day, put their motion on a zommable map with points + lines connecting the points. Use cartodbpositron tiling and red points/lines. Put the created_at field of the tweets as a small label next to the points. Select the best examples to show to your classmates. Try to select users who visit multiple locations on a day, and who don't just stay in Rome/Milan!
 
 *Present your findings to the class using illustrative plots.*
 
@@ -94,26 +115,32 @@ Create some daily paths of users from the dataset. Select users for whom you hav
 ### Location filtering of bad place_ids
 
 ### Calculating consecutive tweet distances
+
+Next, we're calculating the distance between consecutive tweets of users.
+
 ```{r}
-library(dplyr)
-library(magrittr)
-library(sf)
-
-
+# getting bounding box centers
 place$center_lon = (place$lon_min + place$lon_max)/2
 place$center_lat = (place$lat_min + place$lat_max)/2
 
+# adding center coordinates to an sf dataframe
 place_sf = st_as_sf(place, coords = c("center_lon", "center_lat"),  crs = 4326, agr = "constant")
 
+# adding place data to tweets
 tweet = tweet %>% left_join(place) %>% filter(!is.na(place_type)) %>% as.data.table
+# where there were no GPS coordinates, we add bb center coordinates as lat and lon
 tweet[lon=="NULL",lon := center_lon]
 tweet[lat=="NULL",lat := center_lat]
 
+# we sort tweets for each user, and add a row_number to the tweets by user
 tweet = tweet %>% arrange(user_id,tweet_id) %>% group_by(user_id) %>% mutate(flag = row_number())
+# we calculate the day of the year to be able to get tweets that fall within one day
 tweet$dayofyear =unlist(lapply(tweet$created_at, function (x) as.numeric(strftime(x, format = "%j"))))
-
+# shifting rowcount back! this way, we are able to put consecutive tweets next to each other
 tweet$pflag = tweet$flag-1
 
+# calculating distance between any two consecutive tweets
+# this is very slow, I am sure it is not the optimal solution in R!!!
 ctweet = tweet %>% inner_join(tweet,by=c("flag"="pflag","user_id" = "user_id","dayofyear" = "dayofyear"))
 p1 = st_as_sf(ctweet[,c("lat.y","lon.y")],coords = c("lat.y","lon.y"), crs=4326, agr="constant") %>% st_transform(3785)
 p2 = st_as_sf(ctweet[,c("lat.x","lon.x")],coords = c("lat.x","lon.x"), crs=4326, agr="constant") %>% st_transform(3785)
@@ -125,6 +152,50 @@ lines(ctweet %>% group_by(dayofyear) %>% summarise(mean(distance_km)))
 ```
 
 
-### Summarizing displacement/user/day, creating the final chart
+
+## Mobility network
+
+```{r}
+network_colnames = c(
+  "week",
+  "to",
+  "from",
+  "weight"
+)
+network = fread('gyak_italy_network.csv.gz',col.names = network_colnames)
+
+city_network = network %>% 
+  filter(from!=to) %>%
+  left_join(place,by=c("from"="place_id")) %>%
+  left_join(place,by=c("to"="place_id")) %>% 
+  filter(place_type.x=='city') %>% 
+  filter(place_type.y=='city')
+
+create_edge <- function(lon1,lat1,lon2,lat2) {
+  return(st_linestring(matrix(c(lon1, lon2, lat1, lat2),2,2)))
+}
 
 
+df = city_network
+df$ID<-1:length(df$center_lat.x)
+
+ls <- list()
+
+for (i in df$ID){
+  lon1 = df[df$ID==i,]$center_lon.x
+  lat1 = df[df$ID==i,]$center_lat.x
+  lon2 = df[df$ID==i,]$center_lon.y
+  lat2 = df[df$ID==i,]$center_lat.y
+  
+  ls[[i]] = create_edge(lon1,lat1,lon2,lat2)
+  
+}
+
+df$geometry <- ls
+
+df <- df %>% st_as_sf()
+
+for (i in 10:15){
+  plot(df[df$week==i,"weight"],lwd=0.1)
+}
+```
